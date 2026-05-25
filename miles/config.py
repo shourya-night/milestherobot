@@ -16,3 +16,4 @@ STT_MODEL = "base"  # Whisper model size: tiny/base/small
 TTS_RATE = 175  # Speech rate for pyttsx3
 TTS_VOLUME = 1.0
 SPEECH_ENERGY_THRESHOLD = 300  # Mic sensitivity for speech detection
+ACTION_STALE_TIMEOUT_SEC = 2.5  # Stop motors if no fresh inference command in this window.
