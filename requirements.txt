@@ -1,0 +1,6 @@
+opencv-python
+pyserial
+speechrecognition
+openai-whisper
+pyttsx3
+requests
