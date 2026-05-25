@@ -17,3 +17,9 @@ TTS_RATE = 175  # Speech rate for pyttsx3
 TTS_VOLUME = 1.0
 SPEECH_ENERGY_THRESHOLD = 300  # Mic sensitivity for speech detection
 ACTION_STALE_TIMEOUT_SEC = 2.5  # Stop motors if no fresh inference command in this window.
+
+# ROS 2 topic configuration for the Miles brain node.
+IMAGE_TOPIC = "/camera/image_raw"
+SPEECH_TOPIC = "/speech/human_transcript"
+WHEELS_CMD_TOPIC = "/cmd_vel"
+ARM_CMD_TOPIC = "/arm/commands"
