@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import tempfile
 import threading
+import os
 from typing import Optional
 
 import speech_recognition as sr
@@ -32,6 +33,16 @@ def _get_model():
     return _whisper_model
 
 
+def preload_model() -> bool:
+    """Preload Whisper model during startup to avoid first-use runtime stalls."""
+    try:
+        _get_model()
+        return True
+    except Exception as exc:
+        print(f"[speech_in] Warning: Whisper model failed to load ({exc})")
+        return False
+
+
 def _listen_loop() -> None:
     recognizer = sr.Recognizer()
     recognizer.energy_threshold = SPEECH_ENERGY_THRESHOLD
@@ -43,12 +54,22 @@ def _listen_loop() -> None:
             while not _stop_event.is_set():
                 try:
                     audio = recognizer.listen(source, timeout=1.0, phrase_time_limit=6.0)
-                    with tempfile.NamedTemporaryFile(suffix=".wav", delete=True) as tmp:
-                        tmp.write(audio.get_wav_data())
-                        tmp.flush()
-                        text = _get_model().transcribe(tmp.name).get("text", "").strip()
+                    temp_path = None
+                    try:
+                        with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
+                            tmp.write(audio.get_wav_data())
+                            tmp.flush()
+                            temp_path = tmp.name
+
+                        text = _get_model().transcribe(temp_path).get("text", "").strip()
                         if text:
                             _set_latest_speech(text)
+                    finally:
+                        if temp_path and os.path.exists(temp_path):
+                            try:
+                                os.remove(temp_path)
+                            except Exception:
+                                pass
                 except sr.WaitTimeoutError:
                     continue
                 except Exception as exc:  # Keep loop alive despite transcription/mic hiccups.
@@ -61,6 +82,11 @@ def start_listening() -> bool:
     """Start background listener thread. Returns True if mic appears available."""
     global _thread, _mic_available
     _stop_event.clear()
+
+    model_ok = preload_model()
+    if not model_ok:
+        _mic_available = False
+        return False
 
     try:
         with sr.Microphone():

@@ -12,6 +12,7 @@ from config import OLLAMA_MODEL, OLLAMA_URL
 
 SAFE_DEFAULT = {"move": "STOP", "arm": "NONE", "say": "...", "mem": None}
 _PROMPT_TEMPLATE = Path(__file__).with_name("prompt.txt").read_text(encoding="utf-8")
+REQUEST_TIMEOUT_SECONDS = 10
 
 
 def _normalize_response(text: str) -> dict[str, Any]:
@@ -19,11 +20,19 @@ def _normalize_response(text: str) -> dict[str, Any]:
         parsed = json.loads(text)
         if not isinstance(parsed, dict):
             return SAFE_DEFAULT.copy()
+        mem_value = parsed.get("mem")
+        if mem_value is None:
+            normalized_mem = None
+        elif isinstance(mem_value, str) and mem_value.strip().lower() in {"", "null", "none"}:
+            normalized_mem = None
+        else:
+            normalized_mem = mem_value
+
         return {
             "move": parsed.get("move", "STOP"),
             "arm": parsed.get("arm", "NONE"),
             "say": parsed.get("say", "..."),
-            "mem": parsed.get("mem"),
+            "mem": normalized_mem,
         }
     except Exception:
         return SAFE_DEFAULT.copy()
@@ -42,7 +51,7 @@ def run_inference(frame_b64: str, memory_str: str, human_speech: str | None) -> 
     }
 
     try:
-        response = requests.post(OLLAMA_URL, json=payload, timeout=2)
+        response = requests.post(OLLAMA_URL, json=payload, timeout=REQUEST_TIMEOUT_SECONDS)
         response.raise_for_status()
         data = response.json()
         raw_text = data.get("response", "")

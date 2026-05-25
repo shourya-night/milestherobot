@@ -18,18 +18,27 @@ _HEADERS = [
     "mem_update",
     "raw_response",
 ]
+_initialized = False
 
 
 def _ensure_header() -> None:
+    global _initialized
+    if _initialized:
+        return
     path = Path(LOG_PATH)
     if not path.exists() or path.stat().st_size == 0:
         with path.open("w", newline="", encoding="utf-8") as f:
             writer = csv.writer(f)
             writer.writerow(_HEADERS)
+    _initialized = True
+
+
+def init_logger() -> None:
+    """Initialize log file/header once at startup."""
+    _ensure_header()
 
 
 def log_cycle(cycle, human_speech, move, arm, say, mem, raw) -> None:
-    _ensure_header()
     with Path(LOG_PATH).open("a", newline="", encoding="utf-8") as f:
         writer = csv.writer(f)
         writer.writerow(

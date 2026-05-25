@@ -6,11 +6,11 @@ import time
 
 from config import CAMERA_INDEX, DB_PATH, FPS, MEMORY_MAX_ENTRIES, OLLAMA_MODEL
 from inference import run_inference
-from logger import log_cycle
-from memory import add_memory, count_memories, get_recent_memory, init_db
+from logger import init_logger, log_cycle
+from memory import add_memory, close_db, count_memories, get_recent_memory, init_db
 from serial_handler import close_serial, init_serial, send_arm, send_move
 from speech_in import get_latest_speech, microphone_status, start_listening, stop_listening
-from speech_out import speak, tts_status
+from speech_out import shutdown_tts, speak, tts_status
 from vision import get_frame_base64, release_camera
 
 
@@ -28,6 +28,7 @@ def _startup_summary(wheels_ok: bool, arm_ok: bool, mic_ok: bool) -> None:
 
 def main() -> None:
     init_db()
+    init_logger()
     wheels_ok, arm_ok = init_serial()
     mic_ok = start_listening()
     _startup_summary(wheels_ok, arm_ok, mic_ok and microphone_status())
@@ -59,7 +60,7 @@ def main() -> None:
                 print(f"[Human] {human_speech}")
             print(f"[Miles] {say}")
 
-            if mem is not None and str(mem).strip().lower() != "null" and str(mem).strip():
+            if mem is not None:
                 add_memory(str(mem))
 
             log_cycle(cycle, human_speech, move, arm, say, mem, raw)
@@ -70,9 +71,11 @@ def main() -> None:
         print("\nShutting down Miles...")
     finally:
         stop_listening()
+        shutdown_tts()
         close_serial()
         release_camera()
         print(f"Saved memories: {count_memories()}")
+        close_db()
 
 
 if __name__ == "__main__":

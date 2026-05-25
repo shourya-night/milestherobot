@@ -8,7 +8,7 @@ from typing import Optional
 
 import cv2
 
-from config import CAMERA_INDEX
+from config import CAMERA_INDEX, FRAME_HEIGHT, FRAME_WIDTH
 
 _camera_lock = threading.Lock()
 _camera: Optional[cv2.VideoCapture] = None
@@ -33,7 +33,7 @@ def get_frame_base64() -> str:
     if not ok or frame is None:
         return ""
 
-    resized = cv2.resize(frame, (320, 240), interpolation=cv2.INTER_AREA)
+    resized = cv2.resize(frame, (FRAME_WIDTH, FRAME_HEIGHT), interpolation=cv2.INTER_AREA)
     ok, encoded = cv2.imencode(".jpg", resized)
     if not ok:
         return ""

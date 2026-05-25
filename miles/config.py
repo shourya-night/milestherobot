@@ -2,6 +2,8 @@
 
 CAMERA_INDEX = 0
 FPS = 3
+FRAME_WIDTH = 320
+FRAME_HEIGHT = 240
 OLLAMA_MODEL = "moondream2"  # or "llava"
 OLLAMA_URL = "http://localhost:11434/api/generate"
 SERIAL_WHEELS_PORT = "/dev/ttyUSB0"
