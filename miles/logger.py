@@ -11,10 +11,8 @@ from config import LOG_PATH
 _HEADERS = [
     "cycle",
     "timestamp",
-    "human_speech",
     "move",
     "arm",
-    "say",
     "mem_update",
     "raw_response",
 ]
@@ -38,17 +36,15 @@ def init_logger() -> None:
     _ensure_header()
 
 
-def log_cycle(cycle, human_speech, move, arm, say, mem, raw) -> None:
+def log_cycle(cycle, move, arm, mem, raw) -> None:
     with Path(LOG_PATH).open("a", newline="", encoding="utf-8") as f:
         writer = csv.writer(f)
         writer.writerow(
             [
                 cycle,
                 datetime.now(timezone.utc).isoformat(),
-                human_speech or "",
                 move,
                 arm,
-                say,
                 mem or "",
                 raw,
             ]
