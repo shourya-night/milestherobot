@@ -10,7 +10,7 @@ from rclpy.node import Node
 from sensor_msgs.msg import Image
 from std_msgs.msg import String
 
-from config import ARM_CMD_TOPIC, IMAGE_TOPIC, MEMORY_MAX_ENTRIES, SPEECH_TOPIC, WHEELS_CMD_TOPIC
+from config import ARM_CMD_TOPIC, IMAGE_TOPIC, MEMORY_MAX_ENTRIES, WHEELS_CMD_TOPIC
 from inference import run_inference
 from logger import init_logger, log_cycle
 from memory import add_memory, close_db, get_recent_memory, init_db
@@ -19,18 +19,15 @@ from memory import add_memory, close_db, get_recent_memory, init_db
 class MilesBrainNode(Node):
     def __init__(self):
         super().__init__("miles_brain_node")
-        # Initialize database, logging, cv_bridge, subscribers, publishers, and timer here.
         init_db()
         init_logger()
 
         self.bridge = CvBridge()
         self._state_lock = threading.Lock()
         self.latest_frame_b64 = ""
-        self.latest_human_speech = None
         self.cycle = 0
 
         self.create_subscription(Image, IMAGE_TOPIC, self.image_callback, 10)
-        self.create_subscription(String, SPEECH_TOPIC, self.speech_callback, 10)
         self.cmd_pub = self.create_publisher(Twist, WHEELS_CMD_TOPIC, 10)
         self.arm_pub = self.create_publisher(String, ARM_CMD_TOPIC, 10)
         self.timer = self.create_timer(0.5, self.execute_brain_cycle)
@@ -38,7 +35,6 @@ class MilesBrainNode(Node):
         self.get_logger().info("MilesBrainNode initialized.")
 
     def image_callback(self, msg: Image):
-        # Convert ROS Image to OpenCV, resize to (320,240), and update self.latest_frame_b64
         try:
             frame = self.bridge.imgmsg_to_cv2(msg, desired_encoding="bgr8")
             resized = cv2.resize(frame, (320, 240), interpolation=cv2.INTER_AREA)
@@ -50,11 +46,6 @@ class MilesBrainNode(Node):
                 self.latest_frame_b64 = frame_b64
         except Exception as exc:
             self.get_logger().warning(f"Image conversion failed: {exc}")
-
-    def speech_callback(self, msg: String):
-        # Update self.latest_human_speech
-        with self._state_lock:
-            self.latest_human_speech = msg.data.strip() if msg.data else None
 
     def _move_to_twist(self, move: str) -> Twist:
         twist = Twist()
@@ -69,22 +60,18 @@ class MilesBrainNode(Node):
         return twist
 
     def execute_brain_cycle(self):
-        # Code logic: check for frame, call run_inference(), map results to Twist velocities and Strings, publish, and write to memory/CSV logs.
         with self._state_lock:
             frame_b64 = self.latest_frame_b64
-            human_speech = self.latest_human_speech
-            self.latest_human_speech = None
 
         if not frame_b64:
             self.get_logger().debug("No camera frame yet; skipping cycle.")
             return
 
         memory_str = get_recent_memory(MEMORY_MAX_ENTRIES)
-        result = run_inference(frame_b64, memory_str, human_speech)
+        result = run_inference(frame_b64, memory_str)
 
         move = str(result.get("move", "STOP"))
         arm = str(result.get("arm", "NONE"))
-        say = str(result.get("say", "..."))
         mem = result.get("mem")
         raw = str(result.get("_raw", json.dumps(result)))
 
@@ -95,11 +82,10 @@ class MilesBrainNode(Node):
             add_memory(str(mem))
 
         self.cycle += 1
-        log_cycle(self.cycle, human_speech, move, arm, say, mem, raw)
+        log_cycle(self.cycle, move, arm, mem, raw)
 
 
 def main(args=None):
-    # Boilerplate to initialize rclpy, instantiate MilesBrainNode, rclpy.spin(node), and handle graceful shutdown.
     rclpy.init(args=args)
     node = MilesBrainNode()
     try:
