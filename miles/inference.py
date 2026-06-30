@@ -10,7 +10,7 @@ import requests
 
 from config import OLLAMA_MODEL, OLLAMA_URL
 
-SAFE_DEFAULT = {"move": "STOP", "arm": "NONE", "say": "...", "mem": None}
+SAFE_DEFAULT = {"move": "STOP", "arm": "NONE", "mem": None}
 _PROMPT_TEMPLATE = Path(__file__).with_name("prompt.txt").read_text(encoding="utf-8")
 REQUEST_TIMEOUT_SECONDS = 10
 
@@ -31,21 +31,17 @@ def _normalize_response(text: str) -> dict[str, Any]:
         return {
             "move": parsed.get("move", "STOP"),
             "arm": parsed.get("arm", "NONE"),
-            "say": parsed.get("say", "..."),
             "mem": normalized_mem,
         }
     except Exception:
         return SAFE_DEFAULT.copy()
 
 
-def run_inference(frame_b64: str, memory_str: str, human_speech: str | None) -> dict[str, Any]:
+def run_inference(frame_b64: str, memory_str: str) -> dict[str, Any]:
     system_prompt = _PROMPT_TEMPLATE.replace("{M}", memory_str or "")
-    system_prompt = system_prompt.replace("{H}", human_speech or "")
-
     payload = {
         "model": OLLAMA_MODEL,
-        "system": system_prompt,
-        "prompt": "Analyze the scene and respond with JSON only.",
+        "prompt": f"{system_prompt}\n\nAnalyze the scene and respond with JSON only.",
         "images": [frame_b64] if frame_b64 else [],
         "stream": False,
     }
