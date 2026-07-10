@@ -9,7 +9,6 @@ import serial
 from config import SERIAL_ARM_PORT, SERIAL_BAUD, SERIAL_WHEELS_PORT
 
 _VALID_MOVE = {"FORWARD", "BACKWARD", "LEFT", "RIGHT", "STOP"}
-_VALID_ARM = {"REACH", "RETRACT", "GRAB", "RELEASE", "POINT", "PUSH", "TAP", "NONE"}
 
 _wheels: Optional[serial.Serial] = None
 _arm: Optional[serial.Serial] = None
@@ -52,8 +51,23 @@ def send_move(command: str) -> None:
     _send(_wheels, cmd, "move")
 
 
-def send_arm(command: str) -> None:
-    cmd = command if command in _VALID_ARM else "NONE"
+def send_arm(deltas: dict) -> None:
+    """Send per-servo degree deltas, e.g. {"A": 10.0, "B": -5.0, "C": 0.0}.
+
+    Wire format is a compact "A:<deg>,B:<deg>,C:<deg>\n" line — cheap to parse on an
+    Arduino with strtok()/String.indexOf() without needing a JSON library on-device.
+    Any missing/invalid servo value is sent as 0.0 (no movement) rather than dropped,
+    so the receiving firmware always gets all three fields.
+    """
+    if not isinstance(deltas, dict):
+        deltas = {}
+    try:
+        a = float(deltas.get("A", 0.0))
+        b = float(deltas.get("B", 0.0))
+        c = float(deltas.get("C", 0.0))
+    except (TypeError, ValueError):
+        a = b = c = 0.0
+    cmd = f"A:{a:.1f},B:{b:.1f},C:{c:.1f}"
     _send(_arm, cmd, "arm")
 
 
