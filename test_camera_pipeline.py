@@ -1,62 +1,87 @@
-"""Standalone local test of the camera -> Gemini (VLM -> VLA) pipeline.
+"""Camera capture utilities for Miles.
 
-Run this on the Desktop Station with a USB webcam plugged in, BEFORE wiring
-anything into ROS. It reuses vision.py's capture loop untouched, so if this
-works, the camera half of the pipeline is proven and the only remaining step
-is swapping main.py's image source from cv2.VideoCapture to the /camera/image_raw
-subscriber.
-
-Usage:
-    export GEMINI_API_KEY="your-key-here"
-    python test_camera_pipeline.py
+Runs camera polling in a background thread so the newest frame is always available
+without blocking the real-time control loop.
 """
 
 from __future__ import annotations
 
 import base64
-import sys
+import threading
 import time
+from typing import Optional
 
-import vision
-from gemini_client import decide_action, describe_scene
+import cv2
 
+from config import CAMERA_INDEX, FRAME_HEIGHT, FRAME_WIDTH
 
-def main() -> None:
-    print("Starting camera...")
-    if not vision.start_camera():
-        print("ERROR: could not open camera at CAMERA_INDEX (see config.py). "
-              "Check that a webcam is connected and not in use by another app.")
-        sys.exit(1)
-
-    # Give the capture thread a moment to grab its first frame.
-    time.sleep(1.0)
-
-    frame_b64 = vision.get_frame_base64()
-    if not frame_b64:
-        print("ERROR: camera opened but no frame was captured yet. Try again in a second.")
-        vision.release_camera()
-        sys.exit(1)
-
-    # Save the exact frame being sent to Gemini, so you can visually confirm
-    # framing/exposure/focus before trusting the model's description of it.
-    with open("last_frame.jpg", "wb") as f:
-        f.write(base64.b64decode(frame_b64))
-    print("Saved last_frame.jpg — open it and check it looks like what you expect.")
-
-    print("\n--- Stage 1: VLM (perception) ---")
-    scene = describe_scene(frame_b64, memory_str="(no memory yet, first run)")
-    print(f"Scene description: {scene}")
-
-    print("\n--- Stage 2: VLA (decision) ---")
-    decision = decide_action(scene, memory_str="(no memory yet, first run)")
-    print(f"move: {decision['move']}")
-    print(f"arm:  {decision['arm']}")
-    print(f"mem:  {decision['mem']}")
-    print(f"\nraw model output: {decision.get('_raw')}")
-
-    vision.release_camera()
-    print("\nDone. Camera released.")
+_camera: Optional[cv2.VideoCapture] = None
+_camera_lock = threading.Lock()
+_frame_lock = threading.Lock()
+_latest_frame = None
+_stop_event = threading.Event()
+_thread: Optional[threading.Thread] = None
 
 
-if __name__ == "__main__":
-    main()
+def _capture_loop() -> None:
+    """Read frames continuously to prevent camera buffer backlog."""
+    while not _stop_event.is_set():
+        with _camera_lock:
+            camera = _camera
+        if camera is None or not camera.isOpened():
+            time.sleep(0.05)
+            continue
+
+        ok, frame = camera.read()
+        if not ok or frame is None:
+            time.sleep(0.01)
+            continue
+
+        with _frame_lock:
+            global _latest_frame
+            _latest_frame = frame
+
+
+def start_camera() -> bool:
+    """Initialize camera and start background capture thread."""
+    global _camera, _thread
+    with _camera_lock:
+        if _camera is None:
+            _camera = cv2.VideoCapture(CAMERA_INDEX)
+
+        if _camera is None or not _camera.isOpened():
+            return False
+
+    _stop_event.clear()
+    if _thread is None or not _thread.is_alive():
+        _thread = threading.Thread(target=_capture_loop, daemon=True)
+        _thread.start()
+    return True
+
+
+def get_frame_base64() -> str:
+    """Return the latest captured frame as base64 JPEG without blocking capture."""
+    with _frame_lock:
+        frame = None if _latest_frame is None else _latest_frame.copy()
+
+    if frame is None:
+        return ""
+
+    resized = cv2.resize(frame, (FRAME_WIDTH, FRAME_HEIGHT), interpolation=cv2.INTER_AREA)
+    ok, encoded = cv2.imencode(".jpg", resized)
+    if not ok:
+        return ""
+    return base64.b64encode(encoded.tobytes()).decode("utf-8")
+
+
+def release_camera() -> None:
+    """Stop background capture and release hardware resources."""
+    global _camera
+    _stop_event.set()
+    if _thread is not None and _thread.is_alive():
+        _thread.join(timeout=1.0)
+
+    with _camera_lock:
+        if _camera is not None:
+            _camera.release()
+            _camera = None
