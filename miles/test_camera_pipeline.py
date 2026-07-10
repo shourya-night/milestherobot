@@ -48,10 +48,9 @@ def main() -> None:
     print(f"Scene description: {scene}")
 
     print("\n--- Stage 2: VLA (decision) ---")
-    decision = decide_action(scene, memory_str="(no memory yet, first run)", human_said="")
+    decision = decide_action(scene, memory_str="(no memory yet, first run)")
     print(f"move: {decision['move']}")
     print(f"arm:  {decision['arm']}")
-    print(f"say:  {decision['say']}")
     print(f"mem:  {decision['mem']}")
     print(f"\nraw model output: {decision.get('_raw')}")
 
