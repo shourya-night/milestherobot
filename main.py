@@ -11,9 +11,9 @@ from sensor_msgs.msg import Image
 from std_msgs.msg import String
 
 from config import ARM_CMD_TOPIC, IMAGE_TOPIC, MEMORY_MAX_ENTRIES, WHEELS_CMD_TOPIC
-from inference import run_inference
+from gemini_client import decide_action, format_scene_for_vla, perceive_scene
 from logger import init_logger, log_cycle
-from memory import add_memory, close_db, get_recent_memory, init_db
+from memory import add_memory, close_db, get_recent_memory, init_db, touch_label
 
 
 class MilesBrainNode(Node):
@@ -67,22 +67,34 @@ class MilesBrainNode(Node):
             self.get_logger().debug("No camera frame yet; skipping cycle.")
             return
 
+        # Stage 1 — VLM: detect objects in the current frame (no memory bias).
+        perception = perceive_scene(frame_b64)
+        novel_labels = {
+            obj["label"] for obj in perception["objects"] if touch_label(obj["label"])
+        }
+        scene_text = format_scene_for_vla(perception, novel_labels)
+
+        # Stage 2 — VLA: decide move + A/B/C arm degree-deltas from scene text + memory.
         memory_str = get_recent_memory(MEMORY_MAX_ENTRIES)
-        result = run_inference(frame_b64, memory_str)
+        result = decide_action(scene_text, memory_str)
 
         move = str(result.get("move", "STOP"))
-        arm = str(result.get("arm", "NONE"))
+        arm = result.get("arm", {"A": 0.0, "B": 0.0, "C": 0.0})
         mem = result.get("mem")
         raw = str(result.get("_raw", json.dumps(result)))
 
         self.cmd_pub.publish(self._move_to_twist(move))
-        self.arm_pub.publish(String(data=arm))
+        # arm is {"A": <deg>, "B": <deg>, "C": <deg>} — degrees each servo should move
+        # this cycle, relative to its current position. The Pi-side arm node (listening
+        # on ARM_CMD_TOPIC) is responsible for adding these deltas to its tracked servo
+        # positions and driving the actual PWM/serial commands.
+        self.arm_pub.publish(String(data=json.dumps(arm)))
 
         if mem is not None:
             add_memory(str(mem))
 
         self.cycle += 1
-        log_cycle(self.cycle, move, arm, mem, raw)
+        log_cycle(self.cycle, move, json.dumps(arm), mem, raw)
 
 
 def main(args=None):
