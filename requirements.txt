@@ -4,3 +4,4 @@ speechrecognition
 openai-whisper
 pyttsx3
 requests
+google-genai
