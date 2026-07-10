@@ -14,8 +14,8 @@ OLLAMA_URL = "http://localhost:11434/api/generate"
 # machine running this code. The SDK also picks up GEMINI_API_KEY automatically,
 # but we read it explicitly so we can fail loudly if it's missing.
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
-GEMINI_VLM_MODEL = "gemini-2.5-flash"       # Stage 1: perception (needs vision)
-GEMINI_VLA_MODEL = "gemini-2.5-flash-lite"  # Stage 2: decision (text-only, cheaper/faster)
+GEMINI_VLM_MODEL = "gemini-3.5-flash"       # Stage 1: perception (needs vision)
+GEMINI_VLA_MODEL = "gemini-3.1-flash-lite"  # Stage 2: decision (text-only, cheaper/faster)
 # RPM is shared per-model per-project; 2 calls/cycle (VLM + VLA) means the
 # cycle period must be >= 60 / min(VLM_RPM, VLA_RPM) seconds, with margin.
 # Check your project's live limits: AI Studio -> API keys -> Billing Tier column.
